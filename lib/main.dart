@@ -46,6 +46,9 @@ class _MyHomePageState extends State<MyHomePage> {
   // 選択された国コード（デフォルトは日本）
   String _selectedCountryCode = '+81';
 
+  // 連絡先のフォーマットなどを統一した電話番号（例: +818098527749）
+  String? _phoneNumber;
+
   // 国コードと国旗のリスト（例）
   final List<Map<String, String>> _countryCodes = [
     {"code": "+81", "flag": "🇯🇵"},
@@ -56,13 +59,16 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _verificationId;
   String _statusMessage = '';
 
-  // ユーザーがまだ登録されていなければ、usersコレクションにUIDを登録する
-  Future<void> _registerUserIfNotExists(String uid) async {
+  // ユーザーがまだ登録されていなければ、usersコレクションにUIDと電話番号を登録する
+  Future<void> _registerUserIfNotExists(String uid, String phoneNumber) async {
     final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final docSnapshot = await docRef.get();
     if (!docSnapshot.exists) {
-      // 必要なフィールドは最低限UIDのみですが、後でプロフィール情報なども追加可能
-      await docRef.set({'uid': uid});
+      // uid と phoneNumber を保存
+      await docRef.set({'uid': uid, 'phoneNumber': phoneNumber});
+    } else {
+      // 既に存在する場合も、電話番号フィールドを更新しておく（必要なら）
+      await docRef.set({'phoneNumber': phoneNumber}, SetOptions(merge: true));
     }
   }
 
@@ -75,6 +81,8 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     // 選択された国コードと結合（例: +81 + 8098527749 → +818098527749）
     String phoneNumber = _selectedCountryCode + phoneNumberInput;
+    // ローカル変数に保存しておく
+    _phoneNumber = phoneNumber;
 
     setState(() {
       _statusMessage = '認証コードを送信しています...';
@@ -86,9 +94,12 @@ class _MyHomePageState extends State<MyHomePage> {
         verificationCompleted: (PhoneAuthCredential credential) async {
           // 自動認証が成功した場合
           await _auth.signInWithCredential(credential);
-          if (_auth.currentUser != null) {
-            // ユーザーの登録処理
-            await _registerUserIfNotExists(_auth.currentUser!.uid);
+          if (_auth.currentUser != null && _phoneNumber != null) {
+            // ユーザーの登録処理（電話番号も保存）
+            await _registerUserIfNotExists(
+              _auth.currentUser!.uid,
+              _phoneNumber!,
+            );
             if (!mounted) return;
             Navigator.pushReplacement(
               context,
@@ -148,9 +159,9 @@ class _MyHomePageState extends State<MyHomePage> {
       );
 
       await _auth.signInWithCredential(credential);
-      if (_auth.currentUser != null) {
-        // ユーザーの登録処理
-        await _registerUserIfNotExists(_auth.currentUser!.uid);
+      if (_auth.currentUser != null && _phoneNumber != null) {
+        // ユーザーの登録処理（電話番号も保存）
+        await _registerUserIfNotExists(_auth.currentUser!.uid, _phoneNumber!);
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -182,14 +193,6 @@ class _MyHomePageState extends State<MyHomePage> {
         _statusMessage = '';
       });
     }
-  }
-
-  // ログアウト
-  Future<void> _signOut() async {
-    await _auth.signOut();
-    setState(() {
-      _statusMessage = 'サインアウトしました';
-    });
   }
 
   @override

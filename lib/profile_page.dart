@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:ringring/profile_page_model.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:ringring/profile_page_model.dart';
+import 'package:ringring/location_edit_page.dart'; // ★ 位置情報編集ページ
 
 class ProfilePage extends StatefulWidget {
   final String uid;
@@ -33,23 +35,18 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    // 既存プロフィールがあればその値を使う
     _nameController = TextEditingController(text: widget.profile?.name ?? '');
     _statusController = TextEditingController(
       text: widget.profile?.status ?? '',
     );
-    // アイコン画像は既存データ（URL）をそのまま利用（表示時にImage.networkかImage.fileを切り替える）
-    // ※ここでは _iconFile は null のままとする
   }
 
   @override
   void didUpdateWidget(covariant ProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 親から新しいprofileが渡された場合はフォームを更新
     if (widget.profile != oldWidget.profile) {
       _nameController.text = widget.profile?.name ?? '';
       _statusController.text = widget.profile?.status ?? '';
-      // 既に登録済みのアイコンがあれば、_iconFileはクリア（再選択する場合は更新）
       _iconFile = null;
     }
   }
@@ -61,7 +58,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  // 画像ピッカーとクロッパーで画像を取得
+  // 画像選択＆トリム
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(
       source: ImageSource.gallery,
@@ -69,7 +66,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (pickedFile != null) {
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: pickedFile.path,
-        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // 正方形に設定
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: '画像をトリム',
@@ -83,7 +80,6 @@ class _ProfilePageState extends State<ProfilePage> {
       );
       if (croppedFile != null) {
         String filePath = croppedFile.path;
-        // もしパスが "file://" で始まっているなら取り除く
         if (filePath.startsWith('file://')) {
           filePath = filePath.replaceFirst('file://', '');
         }
@@ -94,13 +90,29 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Firestoreに保存（新規 or 更新）
-  // ※実際にはFirebase StorageへアップロードしてURLを取得するのが望ましい
+  // 保存処理（画像アップロード → Firestore）
   Future<void> _saveProfile() async {
-    // ここではシンプルに、画像が選択されていればそのパスを保存
+    String? imageUrl;
+    if (_iconFile != null) {
+      try {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('profile_images')
+            .child('${widget.uid}.jpg');
+        final uploadTask = storageRef.putFile(_iconFile!);
+        await uploadTask.whenComplete(() {});
+        imageUrl = await storageRef.getDownloadURL();
+      } catch (e) {
+        debugPrint('画像アップロードエラー: $e');
+        imageUrl = widget.profile?.iconUrl ?? '';
+      }
+    } else {
+      imageUrl = widget.profile?.iconUrl ?? '';
+    }
+
     final newProfile = ProfilePageModel(
       name: _nameController.text.trim(),
-      iconUrl: _iconFile?.path ?? widget.profile?.iconUrl ?? '',
+      iconUrl: imageUrl,
       status: _statusController.text.trim(),
     );
 
@@ -109,127 +121,16 @@ class _ProfilePageState extends State<ProfilePage> {
           .collection('users')
           .doc(widget.uid)
           .set(newProfile.toFirestore(), SetOptions(merge: true));
-
-      // 保存後、コールバックで親に知らせる
       widget.onProfileUpdated(newProfile);
       setState(() {
         _isEditing = false;
       });
     } catch (e) {
       debugPrint('プロフィール保存時にエラー: $e');
-      // 必要に応じてエラー処理
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // プロフィール未設定 & 編集モードじゃない場合 → 自動的に編集モードへ
-    if (widget.profile == null && !_isEditing) {
-      _isEditing = true;
-    }
-
-    if (_isEditing) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 0),
-            const Text(
-              'プロフィール',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 30),
-            ),
-            const SizedBox(height: 40),
-            _buildProfileIcon(),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: '名前'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _statusController,
-              decoration: const InputDecoration(labelText: '一言'),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _saveProfile,
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.black,
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-              ),
-              child: const Text(
-                '保存',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            // ElevatedButton(onPressed: _saveProfile, child: const Text('保存')),
-            const SizedBox(height: 10),
-            if (widget.profile != null)
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _isEditing = false;
-                  });
-                },
-                child: const Text('キャンセル'),
-              ),
-          ],
-        ),
-      );
-    }
-
-    // 表示モード
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // アイコン画像表示（ローカルファイルがあればそちらを優先）
-            _buildProfileIcon(),
-            const SizedBox(height: 20),
-            Text(
-              widget.profile!.name,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Text(widget.profile!.status, style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 30),
-            // ElevatedButton(
-            //   onPressed: () {
-            //     setState(() {
-            //       _isEditing = true;
-            //     });
-            //   },
-            //   child: const Text('設定変更'),
-            // ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _isEditing = true;
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.black,
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-              ),
-              child: const Text(
-                '編集',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// アイコン画像を表示するウィジェット
+  /// アイコン画像表示（タップで _pickImage）
   Widget _buildProfileIcon() {
     Widget imageWidget;
     if (_iconFile != null) {
@@ -270,8 +171,146 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Icon(Icons.person, size: 50),
       );
     }
-
-    // GestureDetector でラップしてタップ時に _pickImage() を呼ぶ
     return GestureDetector(onTap: _pickImage, child: imageWidget);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.profile == null && !_isEditing) {
+      _isEditing = true;
+    }
+
+    if (_isEditing) {
+      // 編集モード
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            const SizedBox(height: 40),
+            const Text(
+              'プロフィール',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 30),
+            ),
+            const SizedBox(height: 40),
+            _buildProfileIcon(),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: '名前'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _statusController,
+              decoration: const InputDecoration(labelText: '一言'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _saveProfile,
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.black,
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              child: const Text(
+                '保存',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (widget.profile != null)
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isEditing = false;
+                  });
+                },
+                child: const Text('キャンセル'),
+              ),
+          ],
+        ),
+      );
+    }
+
+    // 表示モード
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    final updatedProfile = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => LocationEditPage(
+                              uid: widget.uid,
+                              profile: widget.profile,
+                            ),
+                      ),
+                    );
+                    if (updatedProfile != null) {
+                      widget.onProfileUpdated(updatedProfile);
+                      setState(() {});
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    // foregroundColor: Colors.white,
+                    shape: const CircleBorder(),
+                    backgroundColor: Colors.white,
+                    // padding: const EdgeInsets.all(12), // アイコンの色
+                  ),
+                  child: const Icon(Icons.location_on, color: Colors.black),
+                ),
+                Text(
+                  widget.profile?.municipality ?? '生息地',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                const SizedBox(width: 2),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildProfileIcon(),
+            const SizedBox(height: 20),
+            Text(
+              widget.profile!.name,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(widget.profile!.status, style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 10),
+
+            // プロフィール編集ボタン
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _isEditing = true;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.black,
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              child: const Text(
+                '編集',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // 位置情報編集ボタン
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ringring/friend_add_page.dart';
 import 'package:ringring/profile_page.dart';
 import 'package:ringring/profile_page_model.dart';
 
@@ -117,20 +118,20 @@ class FriendChatPage extends StatelessWidget {
   }
 }
 
-/// -----------------------------------------
-/// 5. 仮の友達一覧・追加画面
-/// -----------------------------------------
-class FriendAddPage extends StatelessWidget {
-  final String uid;
-  const FriendAddPage({Key? key, required this.uid}) : super(key: key);
+// /// -----------------------------------------
+// /// 5. 仮の友達一覧・追加画面
+// /// -----------------------------------------
+// class FriendAddPage extends StatelessWidget {
+//   final String uid;
+//   const FriendAddPage({Key? key, required this.uid}) : super(key: key);
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text('友達一覧・追加画面\nUID: $uid', textAlign: TextAlign.center),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Center(
+//       child: Text('友達一覧・追加画面\nUID: $uid', textAlign: TextAlign.center),
+//     );
+//   }
+// }
 
 /// -----------------------------------------
 /// 6. 実行例（Firebase初期化）
