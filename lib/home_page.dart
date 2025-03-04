@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ringring/friend_add_page.dart';
+import 'package:ringring/friend_chat_page.dart';
 import 'package:ringring/profile_page.dart';
 import 'package:ringring/profile_page_model.dart';
 
@@ -99,21 +100,6 @@ class _HomePageState extends State<HomePage> {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'プロフィール'),
         ],
       ),
-    );
-  }
-}
-
-/// -----------------------------------------
-/// 4. 仮のチャット画面
-/// -----------------------------------------
-class FriendChatPage extends StatelessWidget {
-  final String uid;
-  const FriendChatPage({Key? key, required this.uid}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text('チャット画面\nUID: $uid', textAlign: TextAlign.center),
     );
   }
 }
