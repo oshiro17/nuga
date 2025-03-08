@@ -30,6 +30,21 @@ class _SettingIdPageState extends State<SettingIdPage> {
               .get();
       if (doc.exists) {
         Map<String, dynamic>? data = doc.data() as Map<String, dynamic>?;
+        if (data != null &&
+            data['id'] != null &&
+            (data['id'] as String).isNotEmpty) {
+          // IDが既に設定済みなら、ホームページへ遷移する
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => HomePage(uid: widget.uid),
+              ),
+            );
+          }
+          return; // ここで早期リターン
+        }
+        // ID未設定の場合は、テキストフィールドに反映
         if (data != null && data['id'] != null) {
           _idController.text = data['id'];
         }

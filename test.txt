@@ -1,0 +1,56 @@
+/// -----------------------------------------
+/// 2. ホームページ
+/// -----------------------------------------
+class HomePage extends StatefulWidget {
+  final String uid;
+  const HomePage({Key? key, required this.uid}) : super(key: key);
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+
+  @override
+  void initState() {
+ 
+  }
+
+ 
+  // BottomNavigationBar のタップ処理
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // データ取得中はローディング表示
+
+
+    // 各ページにキャッシュ済みのデータを渡す
+    final List<Widget> pages = [
+      FriendChatPage(),
+      FriendPage(),
+      FriendAddPage(),
+      ProfilePage(),
+    ];
+
+    return Scaffold(
+      body: IndexedStack(index: _selectedIndex, children: pages),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+        selectedItemColor: Colors.white, // 選択中のアイコンの色を白に
+        unselectedItemColor: Colors.white70, // 非選択のアイコンの色をやや透過した白に
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'チャット'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: '友達'),
+          BottomNavigationBarItem(icon: Icon(Icons.group), label: '探す'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'プロフィール'),
+        ],
+      ),
+    );
+  }
+}
