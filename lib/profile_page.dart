@@ -1,3 +1,5 @@
+import 'dart:convert'; // ★ JSONエンコード/デコード用
+import 'package:shared_preferences/shared_preferences.dart'; // ★ SharedPreferences用
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -90,7 +92,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // 保存処理（画像アップロード → Firestore）
+  // 保存処理（画像アップロード → Firestore + SharedPreferencesキャッシュ更新）
   Future<void> _saveProfile() async {
     String? imageUrl;
     if (_iconFile != null) {
@@ -114,14 +116,27 @@ class _ProfilePageState extends State<ProfilePage> {
       name: _nameController.text.trim(),
       iconUrl: imageUrl,
       status: _statusController.text.trim(),
+      municipality: widget.profile?.municipality, // 位置情報を保持する場合
     );
 
     try {
+      // 1) Firestoreに保存
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
           .set(newProfile.toFirestore(), SetOptions(merge: true));
+
+      // 2) SharedPreferencesのキャッシュを更新
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'profile_${widget.uid}';
+      // ProfilePageModel → JSON文字列に変換
+      final jsonString = json.encode(newProfile.toJson());
+      await prefs.setString(cacheKey, jsonString);
+
+      // 3) 呼び出し元へのコールバック
       widget.onProfileUpdated(newProfile);
+
+      // 4) 編集モードを終了して表示モードに戻す
       setState(() {
         _isEditing = false;
       });
@@ -155,6 +170,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
       } else {
+        // 端末ローカルのパスの場合
         imageWidget = ClipRRect(
           borderRadius: BorderRadius.circular(8.0),
           child: Image.file(
@@ -166,6 +182,7 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       }
     } else {
+      // アイコン未設定
       imageWidget = const CircleAvatar(
         radius: 50,
         child: Icon(Icons.person, size: 50),
@@ -176,12 +193,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    // プロフィールが null なら編集モードを強制
     if (widget.profile == null && !_isEditing) {
       _isEditing = true;
     }
 
+    // 編集モード
     if (_isEditing) {
-      // 編集モード
       return SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -239,6 +257,7 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // 位置情報編集ボタン
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -255,15 +274,14 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     );
                     if (updatedProfile != null) {
+                      // 位置情報が変更されたら更新
                       widget.onProfileUpdated(updatedProfile);
                       setState(() {});
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    // foregroundColor: Colors.white,
                     shape: const CircleBorder(),
                     backgroundColor: Colors.white,
-                    // padding: const EdgeInsets.all(12), // アイコンの色
                   ),
                   child: const Icon(Icons.location_on, color: Colors.black),
                 ),
@@ -306,8 +324,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
 
             const SizedBox(height: 10),
-
-            // 位置情報編集ボタン
+            // ここに他の情報やボタンがあれば追加
           ],
         ),
       ),
