@@ -1,10 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class ProfilePageModel {
-  String name;
-  String iconUrl;
-  String status;
-  String? municipality;
+  final String name;
+  final String iconUrl;
+  final String status;
+  final String? municipality; // 市町村(近くの友達で使う想定)
 
   ProfilePageModel({
     required this.name,
@@ -13,8 +11,8 @@ class ProfilePageModel {
     this.municipality,
   });
 
-  factory ProfilePageModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  // Firestore からの生成
+  factory ProfilePageModel.fromFirestore(Map<String, dynamic> data) {
     return ProfilePageModel(
       name: data['name'] ?? '',
       iconUrl: data['iconUrl'] ?? '',
@@ -23,6 +21,7 @@ class ProfilePageModel {
     );
   }
 
+  // JSON -> Model
   factory ProfilePageModel.fromJson(Map<String, dynamic> json) {
     return ProfilePageModel(
       name: json['name'] ?? '',
@@ -32,6 +31,7 @@ class ProfilePageModel {
     );
   }
 
+  // Model -> JSON
   Map<String, dynamic> toJson() {
     return {
       'name': name,
@@ -39,10 +39,5 @@ class ProfilePageModel {
       'status': status,
       if (municipality != null) 'municipality': municipality,
     };
-  }
-
-  // 既存の Firestore 用シリアライズメソッド（内容は toJson と同じ）
-  Map<String, dynamic> toFirestore() {
-    return toJson();
   }
 }

@@ -124,7 +124,7 @@ class _ProfilePageState extends State<ProfilePage> {
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
-          .set(newProfile.toFirestore(), SetOptions(merge: true));
+          .set(newProfile.toJson(), SetOptions(merge: true));
 
       // 2) SharedPreferencesのキャッシュを更新
       final prefs = await SharedPreferences.getInstance();
