@@ -31,7 +31,7 @@ class _FriendChatPageState extends State<FriendChatPage> {
             FirebaseFirestore.instance
                 .collection('users')
                 .doc(widget.uid)
-                .collection('friendlist')
+                .collection('friendList')
                 .orderBy('lastMessageTime', descending: true)
                 .snapshots(),
         builder: (context, snapshot) {

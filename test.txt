@@ -135,12 +135,12 @@ class _HomePageState extends State<HomePage> {
 //       final myData = myDoc.data() as Map<String, dynamic>;
 //       final myMunicipality = myData['municipality'] ?? '';
 
-//       // ① 自分の friendlist を取得
+//       // ① 自分の friendList を取得
 //       QuerySnapshot myFriendsSnapshot =
 //           await FirebaseFirestore.instance
 //               .collection('users')
 //               .doc(widget.uid)
-//               .collection('friendlist')
+//               .collection('friendList')
 //               .get();
 //       Set<String> myFriendUids =
 //           myFriendsSnapshot.docs.map((doc) => doc.id).toSet();
@@ -148,7 +148,7 @@ class _HomePageState extends State<HomePage> {
 //       // -------------------------
 //       // 1) 近くのおすすめユーザー（同じ市町村）
 //       // -------------------------
-//       // 自分を除外し、かつ friendlist に含まれるユーザーを除外
+//       // 自分を除外し、かつ friendList に含まれるユーザーを除外
 //       // Municipality の一致するユーザーをクエリ
 //       QuerySnapshot nearSnapshot =
 //           await FirebaseFirestore.instance
@@ -184,14 +184,14 @@ class _HomePageState extends State<HomePage> {
 //             await FirebaseFirestore.instance
 //                 .collection('users')
 //                 .doc(friendUid)
-//                 .collection('friendlist')
+//                 .collection('friendList')
 //                 .get();
 //         for (var doc in friendFriendSnapshot.docs) {
 //           recommendedUids.add(doc.id);
 //         }
 //       }
 
-//       // 自分 & 自分の friendlist を除外
+//       // 自分 & 自分の friendList を除外
 //       recommendedUids.removeAll(myFriendUids);
 //       recommendedUids.remove(widget.uid);
 
@@ -246,7 +246,7 @@ class _HomePageState extends State<HomePage> {
 //         await FirebaseFirestore.instance
 //             .collection('users')
 //             .doc(currentUser.uid)
-//             .collection('friendlist')
+//             .collection('friendList')
 //             .doc(friendUid)
 //             .set({
 //               'friendUid': friendUid,

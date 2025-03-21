@@ -62,21 +62,21 @@ class _ChatScreenState extends State<ChatScreen> {
         .collection('messages')
         .add(messageData);
 
-    // 2) 互いの friendlist に lastMessageTime を更新
+    // 2) 互いの friendList に lastMessageTime を更新
     final now = FieldValue.serverTimestamp();
     await FirebaseFirestore.instance
         .collection('users')
         .doc(widget.myUid)
-        .collection('friendlist')
+        .collection('friendList')
         .doc(widget.friendUid)
         .update({'lastMessageTime': now})
         .catchError((e) {
-          // もし friendlist ドキュメントがない場合は set() で作ってもよい
+          // もし friendList ドキュメントがない場合は set() で作ってもよい
         });
     await FirebaseFirestore.instance
         .collection('users')
         .doc(widget.friendUid)
-        .collection('friendlist')
+        .collection('friendList')
         .doc(widget.myUid)
         .update({'lastMessageTime': now})
         .catchError((e) {});

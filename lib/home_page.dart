@@ -1,154 +1,11 @@
-// import 'package:flutter/material.dart';
-// import 'package:firebase_core/firebase_core.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:ringring/friend_add_page.dart';
-// import 'package:ringring/friend_chat_page.dart';
-// import 'package:ringring/friend_page.dart';
-// import 'package:ringring/profile_page.dart';
-// import 'package:ringring/profile_page_model.dart';
-
-// /// -----------------------------------------
-// /// 2. ホームページ
-// /// -----------------------------------------
-// class HomePage extends StatefulWidget {
-//   final String uid;
-//   const HomePage({Key? key, required this.uid}) : super(key: key);
-
-//   @override
-//   State<HomePage> createState() => _HomePageState();
-// }
-
-// class _HomePageState extends State<HomePage> {
-//   int _selectedIndex = 0;
-//   ProfilePageModel? _profile;
-//   bool _isLoadingProfile = true; // プロフィール読込中かどうか
-//   bool _isLoadingFriends = true; // 友達リスト読込中かどうか
-//   List<DocumentSnapshot> _friendDocs = []; // キャッシュされた友達情報
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _loadProfile(); // プロフィール取得
-//     _loadFriendList(); // 友達リスト取得（ホームページ生成時のみ）
-//   }
-
-//   Future<void> _loadProfile() async {
-//     try {
-//       final doc =
-//           await FirebaseFirestore.instance
-//               .collection('users')
-//               .doc(widget.uid)
-//               .get();
-
-//       if (doc.exists) {
-//         setState(() {
-//           _profile = ProfilePageModel.fromFirestore(doc);
-//         });
-//       } else {
-//         setState(() {
-//           _profile = null;
-//         });
-//       }
-//     } catch (e) {
-//       debugPrint('プロフィール読み込みエラー: $e');
-//       setState(() {
-//         _profile = null;
-//       });
-//     } finally {
-//       setState(() {
-//         _isLoadingProfile = false;
-//       });
-//     }
-//   }
-
-//   // Firestoreから友達リストと、各友達の詳細情報をまとめて取得
-//   Future<void> _loadFriendList() async {
-//     try {
-//       // friendlist コレクションから友達のUIDを取得
-//       QuerySnapshot snapshot =
-//           await FirebaseFirestore.instance
-//               .collection('users')
-//               .doc(widget.uid)
-//               .collection('friendlist')
-//               .get();
-
-//       // 各友達の詳細情報を並列で取得
-//       List<Future<DocumentSnapshot>> futures =
-//           snapshot.docs.map((doc) {
-//             return FirebaseFirestore.instance
-//                 .collection('users')
-//                 .doc(doc.id)
-//                 .get();
-//           }).toList();
-
-//       List<DocumentSnapshot> friendDocs = await Future.wait(futures);
-//       setState(() {
-//         _friendDocs = friendDocs.where((doc) => doc.exists).toList();
-//       });
-//     } catch (e) {
-//       debugPrint('友達リスト読み込みエラー: $e');
-//     } finally {
-//       setState(() {
-//         _isLoadingFriends = false;
-//       });
-//     }
-//   }
-
-//   // BottomNavigationBar のタップ処理
-//   void _onItemTapped(int index) {
-//     setState(() {
-//       _selectedIndex = index;
-//     });
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     // すべてのデータ取得が完了するまでローディング表示
-//     if (_isLoadingProfile || _isLoadingFriends) {
-//       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-//     }
-
-//     // 各ページにキャッシュ済みの友達情報(_friendDocs)とプロフィール(_profile)を渡す
-//     final List<Widget> pages = [
-//       // FriendChatPage(uid: widget.uid, friendDocs: _friendDocs),
-//       // FriendPage(uid: widget.uid, friendDocs: _friendDocs),
-//       FriendAddPage(uid: widget.uid),
-//       ProfilePage(
-//         uid: widget.uid,
-//         profile: _profile,
-//         // ProfilePageで更新完了したら、こちらにも新プロフィールを反映
-//         onProfileUpdated: (newProfile) {
-//           setState(() {
-//             _profile = newProfile;
-//           });
-//         },
-//       ),
-//     ];
-
-//     return Scaffold(
-//       body: IndexedStack(index: _selectedIndex, children: pages),
-//       bottomNavigationBar: BottomNavigationBar(
-//         currentIndex: _selectedIndex,
-//         onTap: _onItemTapped,
-//         items: const [
-//           // BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'チャット'),
-//           // BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: '友達'),
-//           BottomNavigationBarItem(icon: Icon(Icons.group), label: '探す'),
-//           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'プロフィール'),
-//         ],
-//       ),
-//     );
-//   }
-// }
 import 'dart:convert';
+import 'dart:math' as console;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ProfilePageModel は別ファイルか同ファイルか適宜
 import 'profile_page_model.dart';
-
 import 'friend_add_page.dart';
 import 'profile_page.dart';
 
@@ -183,8 +40,8 @@ class _HomePageState extends State<HomePage> {
     try {
       await _fetchProfile();
       await _fetchFollowRequests();
-      await _fetchFriendList();
-      await _fetchFriendsOfFriends();
+      // await _fetchfriendList();
+      // await _fetchFriendsOfFriends();
       await _fetchNearbyFriends();
     } catch (e) {
       debugPrint('データ取得エラー: $e');
@@ -206,19 +63,6 @@ class _HomePageState extends State<HomePage> {
             .collection('follow_request_list')
             .get();
 
-    // final requests =
-    //     snapshot.docs.map((doc) {
-    //       final data = doc.data();
-    //       return {
-    //         'uid': doc.id,
-    //         'name': data['name'] ?? '',
-    //         'iconUrl': data['iconUrl'] ?? '',
-    //       };
-    //     }).toList();
-
-    // setState(() {
-    //   _followRequests = requests;
-    // });
     final requests =
         snapshot.docs.map<Map<String, String>>((doc) {
           final data = doc.data();
@@ -232,117 +76,132 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _followRequests = requests;
     });
+    debugPrint('フォローリクエストリスト (キャッシュしない): $_followRequests');
   }
 
   // -------------------------------
   // 2) フレンドリスト (キャッシュあり)
   // -------------------------------
-  Future<void> _fetchFriendList() async {
-    final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString('friend_list_${widget.uid}');
-    if (cached != null) {
-      try {
-        final List decoded = json.decode(cached);
-        _friendList =
-            decoded.map<Map<String, String>>((e) {
-              return {
-                'uid': e['uid'] ?? '',
-                'name': e['name'] ?? '',
-                'iconUrl': e['iconUrl'] ?? '',
-              };
-            }).toList();
-        setState(() {});
-        return; // キャッシュがあれば Firebase に行かない
-      } catch (_) {
-        debugPrint('フレンドリストのキャッシュ読み込みエラー');
-      }
-    }
+  // Future<void> _fetchfriendList() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final cached = prefs.getString('friendList_${widget.uid}');
+  //   if (cached != null) {
+  //     try {
+  //       final List decoded = json.decode(cached);
+  //       _friendList =
+  //           decoded.map<Map<String, String>>((e) {
+  //             return {
+  //               'uid': e['uid'] ?? '',
+  //               'name': e['name'] ?? '',
+  //               'iconUrl': e['iconUrl'] ?? '',
+  //             };
+  //           }).toList();
+  //       debugPrint('キャッシュされたフレンドリスト: $_friendList');
+  //       setState(() {});
+  //       return; // キャッシュがあれば Firebase にアクセスしない
+  //     } catch (_) {
+  //       debugPrint('フレンドリストのキャッシュ読み込みエラー');
+  //     }
+  //   } else {
+  //     debugPrint('フレンドリストのキャッシュは存在しません');
+  //   }
 
-    // キャッシュがない場合だけ Firebase アクセス
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.uid)
-            .collection('friend_list')
-            .get();
-    final friends =
-        snapshot.docs.map<Map<String, String>>((doc) {
-          final data = doc.data();
-          return {
-            'uid': doc.id,
-            'name': data['name'] ?? '',
-            'iconUrl': data['iconUrl'] ?? '',
-          };
-        }).toList();
+  //   // キャッシュがない場合だけ Firebase アクセス
+  //   final snapshot =
+  //       await FirebaseFirestore.instance
+  //           .collection('users')
+  //           .doc(widget.uid)
+  //           .collection('friendList')
+  //           .get();
+  //   final friends =
+  //       snapshot.docs.map<Map<String, String>>((doc) {
+  //         final data = doc.data();
+  //         return {
+  //           'uid': doc.id,
+  //           'name': data['name'] ?? '',
+  //           'iconUrl': data['iconUrl'] ?? '',
+  //         };
+  //       }).toList();
 
-    // キャッシュに保存
-    await prefs.setString('friend_list_${widget.uid}', json.encode(friends));
+  //   // キャッシュに保存
+  //   await prefs.setString('friendList_${widget.uid}', json.encode(friends));
+  //   debugPrint('Firebaseから取得したフレンドリストをキャッシュに保存: $friends');
 
-    setState(() {
-      _friendList = friends;
-    });
-  }
+  //   setState(() {
+  //     _friendList = friends;
+  //   });
+  // }
 
   // -------------------------------
   // 3) 友達の友達リスト (キャッシュあり)
   // -------------------------------
-  Future<void> _fetchFriendsOfFriends() async {
-    final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString('friends_of_friends_${widget.uid}');
-    if (cached != null) {
-      try {
-        final List decoded = json.decode(cached);
-        _friendsOfFriends =
-            decoded.map<Map<String, String>>((e) {
-              return {
-                'uid': e['uid'] ?? '',
-                'name': e['name'] ?? '',
-                'iconUrl': e['iconUrl'] ?? '',
-              };
-            }).toList();
-        setState(() {});
-        return; // キャッシュがあれば Firebase に行かない
-      } catch (_) {
-        debugPrint('友達の友達リストのキャッシュ読み込みエラー');
-      }
-    }
+  // Future<void> _fetchFriendsOfFriends() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final cached = prefs.getString('friends_of_friends_${widget.uid}');
+  //   if (cached != null) {
+  //     try {
+  //       final List decoded = json.decode(cached);
+  //       _friendsOfFriends =
+  //           decoded.map<Map<String, String>>((e) {
+  //             return {
+  //               'uid': e['uid'] ?? '',
+  //               'name': e['name'] ?? '',
+  //               'iconUrl': e['iconUrl'] ?? '',
+  //             };
+  //           }).toList();
+  //       debugPrint('キャッシュされた友達の友達リスト: $_friendsOfFriends');
+  //       setState(() {});
+  //       return; // キャッシュがあれば Firebase にアクセスしない
+  //     } catch (_) {
+  //       debugPrint('友達の友達リストのキャッシュ読み込みエラー');
+  //     }
+  //   } else {
+  //     debugPrint('友達の友達リストのキャッシュは存在しません');
+  //   }
 
-    // キャッシュがない場合のみ Firebase へ
-    List<Map<String, String>> temp = [];
-    for (var friend in _friendList) {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(friend['uid'])
-              .collection('friend_list')
-              .get();
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        temp.add({
-          'uid': doc.id,
-          'name': data['name'] ?? '',
-          'iconUrl': data['iconUrl'] ?? '',
-        });
-      }
-    }
-    // 重複や自分・既存フレンドは除外してもOK
-    // ここでは単純に重複削除だけしておく
-    final unique = <String, Map<String, String>>{};
-    for (var item in temp) {
-      unique[item['uid'] ?? ''] = item;
-    }
-    final result = unique.values.toList();
+  //   // キャッシュがない場合、Firebaseへアクセス開始
+  //   debugPrint('Firebaseから友達の友達リストを取得します');
+  //   List<Map<String, String>> temp = [];
+  //   for (var friend in _friendList) {
+  //     debugPrint('Firestoreにアクセス: ユーザー ${friend['uid']} の friendList を取得中...');
+  //     final snapshot =
+  //         await FirebaseFirestore.instance
+  //             .collection('users')
+  //             .doc(friend['uid'])
+  //             .collection('friendList')
+  //             .get();
 
-    // キャッシュに保存
-    await prefs.setString(
-      'friends_of_friends_${widget.uid}',
-      json.encode(result),
-    );
+  //     debugPrint(
+  //       '友達 ${friend['uid']} の friendList から取得したドキュメント数: ${snapshot.docs.length}',
+  //     );
+  //     for (var doc in snapshot.docs) {
+  //       final data = doc.data();
+  //       debugPrint('取得したドキュメント: id=${doc.id}, data=$data');
+  //       temp.add({
+  //         'uid': doc.id,
+  //         'name': data['name'] ?? '',
+  //         'iconUrl': data['iconUrl'] ?? '',
+  //       });
+  //     }
+  //   }
+  //   // 重複削除（キーは uid とする）
+  //   final unique = <String, Map<String, String>>{};
+  //   for (var item in temp) {
+  //     unique[item['uid'] ?? ''] = item;
+  //   }
+  //   final result = unique.values.toList();
 
-    setState(() {
-      _friendsOfFriends = result;
-    });
-  }
+  //   // キャッシュに保存
+  //   await prefs.setString(
+  //     'friends_of_friends_${widget.uid}',
+  //     json.encode(result),
+  //   );
+  //   debugPrint('Firebaseから取得した友達の友達リストをキャッシュに保存: $result');
+
+  //   setState(() {
+  //     _friendsOfFriends = result;
+  //   });
+  // }
 
   // -------------------------------
   // 4) 近くの友達リスト (キャッシュあり)
@@ -357,18 +216,22 @@ class _HomePageState extends State<HomePage> {
             decoded.map<Map<String, String>>((e) {
               return {
                 'uid': e['uid'] ?? '',
-                'name': e['name'] ?? '',
+                'name': e['name'] ?? 'namae',
                 'iconUrl': e['iconUrl'] ?? '',
               };
             }).toList();
+        debugPrint('キャッシュされた近くの友達リスト: $_nearbyFriends');
         setState(() {});
-        return; // キャッシュがあれば Firebase に行かない
+        return; // キャッシュがあれば Firebase にアクセスしない
       } catch (_) {
         debugPrint('近くの友達リストのキャッシュ読み込みエラー');
       }
+    } else {
+      debugPrint('近くの友達リストのキャッシュは存在しません');
     }
+    debugPrint('近くの友達リストのキャッシュは存在しません');
 
-    // まず自分のステータス or municipality を取得 (ここでは status とする)
+    // まず自分のステータス (ここでは status とする) を取得
     final userDoc =
         await FirebaseFirestore.instance
             .collection('users')
@@ -376,18 +239,20 @@ class _HomePageState extends State<HomePage> {
             .get();
     if (!userDoc.exists) return;
     final userData = userDoc.data()!;
-    final myStatus = userData['status'] ?? '';
+    final myStatus = userData['city'] ?? '';
 
+    debugPrint('Firebaseから近くの友達リストを取得します');
     final snapshot =
         await FirebaseFirestore.instance
             .collection('users')
-            .where('status', isEqualTo: myStatus)
+            .where('city', isEqualTo: myStatus)
             .get();
 
     final nearList =
         snapshot.docs
             .map<Map<String, String>>((doc) {
               final data = doc.data();
+              debugPrint('取得したドキュメント: id=${doc.id}, data=${data['name']}');
               return {
                 'uid': doc.id,
                 'name': data['name'] ?? '',
@@ -402,6 +267,7 @@ class _HomePageState extends State<HomePage> {
       'nearby_friends_${widget.uid}',
       json.encode(nearList),
     );
+    debugPrint('Firebaseから取得した近くの友達リストをキャッシュに保存: $nearList');
 
     setState(() {
       _nearbyFriends = nearList;
@@ -422,6 +288,7 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _profile = ProfilePageModel.fromFirestore(data);
       });
+      debugPrint('取得したプロフィール: $_profile');
     }
   }
 
@@ -456,7 +323,6 @@ class _HomePageState extends State<HomePage> {
         uid: widget.uid,
         profile: _profile,
         onProfileUpdated: (updated) {
-          // 例: プロフィールが更新されたら state に反映
           setState(() {
             _profile = updated;
           });

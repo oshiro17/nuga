@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FriendAddPage extends StatefulWidget {
   final String uid;
@@ -52,11 +55,11 @@ class _FriendAddPageState extends State<FriendAddPage> {
           .doc(userUid)
           .delete();
 
-      // 2) friend_list に追加
+      // 2) friendList に追加
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
-          .collection('friend_list')
+          .collection('friendList')
           .doc(userUid)
           .set({'name': user['name'] ?? '', 'iconUrl': user['iconUrl'] ?? ''});
 
@@ -75,13 +78,17 @@ class _FriendAddPageState extends State<FriendAddPage> {
     if (userUid == null) return;
 
     try {
-      // Firestore の friend_list に追加
+      // Firestore の friendList に追加
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
-          .collection('friend_list')
+          .collection('friendList')
           .doc(userUid)
-          .set({'name': user['name'] ?? '', 'iconUrl': user['iconUrl'] ?? ''});
+          .set({
+            'uid': user['uid'],
+            'name': user['name'] ?? '',
+            'iconUrl': user['iconUrl'] ?? '',
+          });
 
       // ローカルの _friendsOfFriends または _nearbyFriends から削除
       // 同じ uid がいれば削除
@@ -89,6 +96,38 @@ class _FriendAddPageState extends State<FriendAddPage> {
         _friendsOfFriends.removeWhere((element) => element['uid'] == userUid);
         _nearbyFriends.removeWhere((element) => element['uid'] == userUid);
       });
+      // SharedPreferences からも削除
+      final prefs = await SharedPreferences.getInstance();
+
+      // friends_of_friends
+      final cachedFoF = prefs.getString('friends_of_friends_${widget.uid}');
+      if (cachedFoF != null) {
+        try {
+          final List<dynamic> decoded = json.decode(cachedFoF);
+          decoded.removeWhere((element) => element['uid'] == userUid);
+          await prefs.setString(
+            'friends_of_friends_${widget.uid}',
+            json.encode(decoded),
+          );
+        } catch (e) {
+          debugPrint('friends_of_friends キャッシュ更新エラー: $e');
+        }
+      }
+
+      // nearby_friends
+      final cachedNearby = prefs.getString('nearby_friends_${widget.uid}');
+      if (cachedNearby != null) {
+        try {
+          final List<dynamic> decoded = json.decode(cachedNearby);
+          decoded.removeWhere((element) => element['uid'] == userUid);
+          await prefs.setString(
+            'nearby_friends_${widget.uid}',
+            json.encode(decoded),
+          );
+        } catch (e) {
+          debugPrint('nearby_friends キャッシュ更新エラー: $e');
+        }
+      }
     } catch (e) {
       debugPrint('友達追加エラー: $e');
     }
