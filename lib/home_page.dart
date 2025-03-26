@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as console;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ringring/play_request_page.dart';
@@ -11,6 +10,11 @@ import 'profile_page_model.dart';
 import 'friend_add_page.dart';
 import 'profile_page.dart';
 import 'friend_page.dart';
+
+// 日付が同じかどうかを比較するヘルパー関数
+bool isSameDay(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
 
 class HomePage extends StatefulWidget {
   final String uid;
@@ -36,9 +40,10 @@ class _HomePageState extends State<HomePage> {
   List<DocumentSnapshot> _friendDocs = [];
 
   // PlayRequest 用のデータ
-  int _requestsPossible = 1; // requestspossible フィールドの値（null の場合は 1）
-  List<String> _sendList = []; // 自分が送信したリクエスト先の友達 UID リスト
-  List<String> _incomingPlayRequests = []; // 自分が受信した playrequests の送信者 UID リスト
+  int _requestsPossible = 1; // requestspossible フィールド（null の場合は 1）
+  List<String> _sendList = []; // 自分が送信したリクエスト先の友達 UID のリスト
+  List<String> _incomingPlayRequests = []; // 自分が受信した playrequests の送信者 UID のリスト
+  DateTime? _lastPlayRequestDate; // 最後にリクエスト送信した日（"yyyy-MM-dd"）
   StreamSubscription? _playRequestsSubscription;
 
   @override
@@ -59,7 +64,7 @@ class _HomePageState extends State<HomePage> {
     try {
       await _fetchProfile();
       await _fetchFollowRequests();
-      await _fetchfriendList();
+      await _fetchFriendList();
       await _fetchFriendsOfFriends();
       await _fetchNearbyFriends();
       await _fetchSendList();
@@ -98,7 +103,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   // 2) フレンドリスト（キャッシュあり）
-  Future<void> _fetchfriendList() async {
+  Future<void> _fetchFriendList() async {
     final prefs = await SharedPreferences.getInstance();
     final cached = prefs.getString('friendList_${widget.uid}');
     if (cached != null) {
@@ -296,7 +301,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 6) 自分が送信した play request のリスト (sendlist) を取得
+  // 6) 自分が送信した play request のリスト (sendlist) と最後の送信日を取得
   Future<void> _fetchSendList() async {
     final doc =
         await FirebaseFirestore.instance
@@ -311,10 +316,20 @@ class _HomePageState extends State<HomePage> {
           _sendList = List<String>.from(list);
         });
       }
+      // lastPlayRequestDate は "yyyy-MM-dd" 形式で保存
+      final lastDateStr = data['lastPlayRequestDate'];
+      if (lastDateStr != null && lastDateStr is String) {
+        final parsed = DateTime.tryParse(lastDateStr);
+        if (parsed != null) {
+          setState(() {
+            _lastPlayRequestDate = parsed;
+          });
+        }
+      }
     }
   }
 
-  // 7) 自分の playrequests サブコレクションのリスナー設定（受信したリクエスト）
+  // 7) 自分の playrequests サブコレクションのリスナー設定（受信したリクエスト：有効期限チェック付き）
   void _setupPlayRequestsListener() {
     _playRequestsSubscription = FirebaseFirestore.instance
         .collection('users')
@@ -326,8 +341,14 @@ class _HomePageState extends State<HomePage> {
           for (var doc in snapshot.docs) {
             final data = doc.data();
             final senderUid = data['uid'];
-            if (senderUid != null) {
-              newIncoming.add(senderUid);
+            final Timestamp? timestamp = data['date'] as Timestamp?;
+            if (timestamp != null) {
+              DateTime requestDate = timestamp.toDate();
+              // 本日と異なるリクエストは無効として除外
+              if (!isSameDay(requestDate, DateTime.now())) continue;
+              if (senderUid != null) {
+                newIncoming.add(senderUid);
+              }
             }
           }
           setState(() {
@@ -336,7 +357,7 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
-  // ホームページ側で送信後に sendlist を更新するためのコールバック
+  // ホーム側で送信後に sendlist を更新するためのコールバック
   Future<void> _refreshSendList() async {
     await _fetchSendList();
   }
@@ -380,6 +401,7 @@ class _HomePageState extends State<HomePage> {
         requestsPossible: _requestsPossible,
         incomingPlayRequests: _incomingPlayRequests,
         sendList: _sendList,
+        lastPlayRequestDate: _lastPlayRequestDate,
         onRefreshSendList: _refreshSendList,
       ),
     ];
