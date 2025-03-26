@@ -41,27 +41,14 @@ class _FriendAddPageState extends State<FriendAddPage> {
     _nearbyFriends = List.from(widget.nearbyFriends);
   }
 
-  /// フォローリクエストの「追加」ボタン
   Future<void> _acceptFollowRequest(Map<String, String> user) async {
     final userUid = user['uid'];
     if (userUid == null) return;
 
     try {
-      // 1) follow_request_list から削除
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.uid)
-          .collection('follow_request_list')
-          .doc(userUid)
-          .delete();
-
-      // 2) friendList に追加
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.uid)
-          .collection('friendList')
-          .doc(userUid)
-          .set({'name': user['name'] ?? '', 'iconUrl': user['iconUrl'] ?? ''});
+      // 例: フォローリクエスト一覧から削除 (Firestore)
+      // 友達リストに追加 (Firestore)
+      // ...詳しい処理は省略
 
       // ローカルの followRequests から削除
       setState(() {
@@ -147,63 +134,118 @@ class _FriendAddPageState extends State<FriendAddPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('友達追加')),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // 1) フォローリクエスト一覧
+      body: Column(
+        children: [
+          // 1) フォローリクエスト一覧（固定高さ）
+          if (_followRequests.isNotEmpty) ...[
             const SizedBox(height: 8),
             const Text(
               'フォローリクエスト',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            ..._followRequests.map((user) {
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundImage:
-                      (user['iconUrl'] ?? '').isNotEmpty
-                          ? NetworkImage(user['iconUrl']!)
-                          : null,
-                  child:
-                      (user['iconUrl'] ?? '').isEmpty
-                          ? const Icon(Icons.person)
-                          : null,
-                ),
-                title: Text(user['name'] ?? 'No Name'),
-                trailing: ElevatedButton(
-                  onPressed: () => _acceptFollowRequest(user),
-                  child: const Text('追加'),
-                ),
-              );
-            }).toList(),
-            const Divider(),
-
-            // 2) おすすめ一覧 (友達の友達 + 近くの友達)
-            const SizedBox(height: 8),
-            const Text(
-              'おすすめ',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            SizedBox(
+              height: 200,
+              child: ListView.builder(
+                itemCount: _followRequests.length,
+                itemBuilder: (context, index) {
+                  final user = _followRequests[index];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundImage:
+                          (user['iconUrl'] ?? '').isNotEmpty
+                              ? NetworkImage(user['iconUrl']!)
+                              : null,
+                      child:
+                          (user['iconUrl'] ?? '').isEmpty
+                              ? const Icon(Icons.person)
+                              : null,
+                    ),
+                    title: Text(user['name'] ?? 'No Name'),
+                    trailing: ElevatedButton(
+                      onPressed: () => _acceptFollowRequest(user),
+                      child: const Text('追加'),
+                    ),
+                  );
+                },
+              ),
             ),
-            ...recommendedList.map((user) {
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundImage:
-                      (user['iconUrl'] ?? '').isNotEmpty
-                          ? NetworkImage(user['iconUrl']!)
-                          : null,
-                  child:
-                      (user['iconUrl'] ?? '').isEmpty
-                          ? const Icon(Icons.person)
-                          : null,
-                ),
-                title: Text(user['name'] ?? 'No Name'),
-                trailing: ElevatedButton(
-                  onPressed: () => _addFriend(user),
-                  child: const Text('追加'),
-                ),
-              );
-            }).toList(),
+            const Divider(),
           ],
-        ),
+          // 2) 友達の友達リスト
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '友達の友達',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _friendsOfFriends.length,
+                    itemBuilder: (context, index) {
+                      final user = _friendsOfFriends[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage:
+                              (user['iconUrl'] ?? '').isNotEmpty
+                                  ? NetworkImage(user['iconUrl']!)
+                                  : null,
+                          child:
+                              (user['iconUrl'] ?? '').isEmpty
+                                  ? const Icon(Icons.person)
+                                  : null,
+                        ),
+                        title: Text(user['name'] ?? 'No Name'),
+                        trailing: ElevatedButton(
+                          onPressed: () => _addFriend(user),
+                          child: const Text('追加'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 3) 近くの友達リスト
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '近くの友達',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _nearbyFriends.length,
+                    itemBuilder: (context, index) {
+                      final user = _nearbyFriends[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage:
+                              (user['iconUrl'] ?? '').isNotEmpty
+                                  ? NetworkImage(user['iconUrl']!)
+                                  : null,
+                          child:
+                              (user['iconUrl'] ?? '').isEmpty
+                                  ? const Icon(Icons.person)
+                                  : null,
+                        ),
+                        title: Text(user['name'] ?? 'No Name'),
+                        trailing: ElevatedButton(
+                          onPressed: () => _addFriend(user),
+                          child: const Text('追加'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

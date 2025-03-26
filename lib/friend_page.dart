@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'chat_screen.dart';
+import 'package:ringring/chat_screen.dart';
 
 class FriendPage extends StatelessWidget {
   final String uid; // ログイン中のユーザーUID
-  final List<DocumentSnapshot> friendDocs; // HomePageでキャッシュした友達情報
+  final List<Map<String, String>> friendList; // HomePageで保持している友達リスト
 
-  const FriendPage({Key? key, required this.uid, required this.friendDocs})
+  const FriendPage({Key? key, required this.uid, required this.friendList})
     : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     // 友達情報がない場合の表示
-    if (friendDocs.isEmpty) {
+    if (friendList.isEmpty) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('友達チャット', style: TextStyle(color: Colors.white)),
@@ -32,16 +31,15 @@ class FriendPage extends StatelessWidget {
       ),
       backgroundColor: Colors.black,
       body: ListView.builder(
-        itemCount: friendDocs.length,
+        itemCount: friendList.length,
         itemBuilder: (context, index) {
-          final friendData = friendDocs[index].data() as Map<String, dynamic>;
-          final friendUid = friendDocs[index].id;
-          final friendName = friendData['name'] ?? 'No Name';
-          // final friendId = friendData['id'] ?? '';
+          final friend = friendList[index];
+          final friendUid = friend['uid'] ?? '';
+          final friendName = friend['name'] ?? 'No Name';
 
           return ListTile(
             onTap: () {
-              // チャット画面へ遷移
+              // ここでチャット画面へ遷移する処理を記述（例）
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -54,18 +52,20 @@ class FriendPage extends StatelessWidget {
                 ),
               );
             },
-            leading: const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.person, color: Colors.black),
+            leading: CircleAvatar(
+              backgroundImage:
+                  (friend['iconUrl'] ?? '').isNotEmpty
+                      ? NetworkImage(friend['iconUrl']!)
+                      : null,
+              child:
+                  (friend['iconUrl'] ?? '').isEmpty
+                      ? const Icon(Icons.person)
+                      : null,
             ),
             title: Text(
               friendName,
               style: const TextStyle(color: Colors.white),
             ),
-            // subtitle: Text(
-            //   friendId,
-            //   style: const TextStyle(color: Colors.white70),
-            // ),
           );
         },
       ),
