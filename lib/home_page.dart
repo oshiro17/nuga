@@ -302,6 +302,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   // 6) 自分が送信した play request のリスト (sendlist) と最後の送信日を取得
+  // 6) 自分が送信した play request のリスト (sendlist) と最後の送信日を取得、かつ playrequests コレクションをクリア
   Future<void> _fetchSendList() async {
     final doc =
         await FirebaseFirestore.instance
@@ -310,19 +311,33 @@ class _HomePageState extends State<HomePage> {
             .get();
     if (doc.exists) {
       final data = doc.data()!;
-      final list = data['sendlist'];
-      if (list != null && list is List) {
-        setState(() {
-          _sendList = List<String>.from(list);
-        });
-      }
-      // lastPlayRequestDate は "yyyy-MM-dd" 形式で保存
+      final todayStr = DateTime.now().toIso8601String().substring(0, 10);
       final lastDateStr = data['lastPlayRequestDate'];
-      if (lastDateStr != null && lastDateStr is String) {
-        final parsed = DateTime.tryParse(lastDateStr);
-        if (parsed != null) {
+      // lastPlayRequestDateが今日じゃなければ、sendlistとplayrequestsサブコレクションをクリアする
+      if (lastDateStr == null || lastDateStr != todayStr) {
+        // sendlist を空リストに更新
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.uid)
+            .update({'sendlist': []});
+        setState(() {
+          _sendList = [];
+        });
+        // playrequestsサブコレクション内の全ドキュメントを削除
+        final playRequestsSnapshot =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(widget.uid)
+                .collection('playrequests')
+                .get();
+        for (var doc in playRequestsSnapshot.docs) {
+          await doc.reference.delete();
+        }
+      } else {
+        final list = data['sendlist'];
+        if (list != null && list is List) {
           setState(() {
-            _lastPlayRequestDate = parsed;
+            _sendList = List<String>.from(list);
           });
         }
       }
@@ -409,8 +424,17 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
+        backgroundColor: Colors.black, // 背景を黒に設定
+        selectedItemColor: Colors.white, // 選択時のアイコン・ラベルを白に
+        unselectedItemColor: Colors.white70, // 非選択時は少し薄い白に
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+        unselectedLabelStyle: const TextStyle(fontSize: 12),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.group), label: '友達追加'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'プロフィール'),
