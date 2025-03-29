@@ -9,6 +9,7 @@ class FriendAddPage extends StatefulWidget {
   final List<Map<String, String>> friendList;
   final List<Map<String, String>> friendsOfFriends;
   final List<Map<String, String>> nearbyFriends;
+  final VoidCallback? onFriendAdded; // 友達追加後のコールバック
 
   const FriendAddPage({
     Key? key,
@@ -17,6 +18,7 @@ class FriendAddPage extends StatefulWidget {
     required this.friendList,
     required this.friendsOfFriends,
     required this.nearbyFriends,
+    this.onFriendAdded,
   }) : super(key: key);
 
   @override
@@ -25,7 +27,7 @@ class FriendAddPage extends StatefulWidget {
 
 class _FriendAddPageState extends State<FriendAddPage> {
   late List<Map<String, String>> _followRequests;
-  late List<Map<String, String>> _friendList;
+  // friendList は表示に使わないので省略
   late List<Map<String, String>> _friendsOfFriends;
   late List<Map<String, String>> _nearbyFriends;
 
@@ -37,22 +39,35 @@ class _FriendAddPageState extends State<FriendAddPage> {
   @override
   void initState() {
     super.initState();
-    // 受け取ったリストを State 内にコピー
     _followRequests = List.from(widget.followRequests);
-    _friendList = List.from(widget.friendList);
     _friendsOfFriends = List.from(widget.friendsOfFriends);
     _nearbyFriends = List.from(widget.nearbyFriends);
+  }
+
+  @override
+  void didUpdateWidget(covariant FriendAddPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.followRequests != widget.followRequests) {
+      setState(() {
+        _followRequests = List.from(widget.followRequests);
+      });
+    }
+    if (oldWidget.friendsOfFriends != widget.friendsOfFriends) {
+      setState(() {
+        _friendsOfFriends = List.from(widget.friendsOfFriends);
+      });
+    }
+    if (oldWidget.nearbyFriends != widget.nearbyFriends) {
+      setState(() {
+        _nearbyFriends = List.from(widget.nearbyFriends);
+      });
+    }
   }
 
   Future<void> _acceptFollowRequest(Map<String, String> user) async {
     final userUid = user['uid'];
     if (userUid == null) return;
     try {
-      // 例: フォローリクエスト一覧から削除 (Firestore)
-      // 友達リストに追加 (Firestore)
-      // ...詳しい処理は省略
-
-      // ローカルの followRequests から削除
       setState(() {
         _followRequests.removeWhere((element) => element['uid'] == userUid);
       });
@@ -61,32 +76,23 @@ class _FriendAddPageState extends State<FriendAddPage> {
     }
   }
 
-  /// おすすめの「追加」ボタン
   Future<void> _addFriend(Map<String, String> user) async {
     final userUid = user['uid'];
     if (userUid == null) return;
     try {
-      // Firestore の friendList に追加
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.uid)
           .collection('friendList')
           .doc(userUid)
-          .set({
-            'uid': user['uid'],
-            'name': user['name'] ?? '',
-            'iconUrl': user['iconUrl'] ?? '',
-          });
+          .set({'uid': user['uid']});
 
-      // ローカルの _friendsOfFriends または _nearbyFriends から削除
       setState(() {
         _friendsOfFriends.removeWhere((element) => element['uid'] == userUid);
         _nearbyFriends.removeWhere((element) => element['uid'] == userUid);
       });
-      // SharedPreferences からも削除
-      final prefs = await SharedPreferences.getInstance();
 
-      // friends_of_friends のキャッシュ更新
+      final prefs = await SharedPreferences.getInstance();
       final cachedFoF = prefs.getString('friends_of_friends_${widget.uid}');
       if (cachedFoF != null) {
         try {
@@ -100,8 +106,6 @@ class _FriendAddPageState extends State<FriendAddPage> {
           debugPrint('friends_of_friends キャッシュ更新エラー: $e');
         }
       }
-
-      // nearby_friends のキャッシュ更新
       final cachedNearby = prefs.getString('nearby_friends_${widget.uid}');
       if (cachedNearby != null) {
         try {
@@ -115,12 +119,13 @@ class _FriendAddPageState extends State<FriendAddPage> {
           debugPrint('nearby_friends キャッシュ更新エラー: $e');
         }
       }
+      // 友達追加成功後、親に通知して friendList の更新を促す
+      widget.onFriendAdded?.call();
     } catch (e) {
       debugPrint('友達追加エラー: $e');
     }
   }
 
-  // Firestore の users コレクションから、電話番号またはidで検索する処理
   Future<void> _performSearch() async {
     final query = _searchQuery.trim();
     if (query.isEmpty) {
@@ -134,22 +139,7 @@ class _FriendAddPageState extends State<FriendAddPage> {
     });
     List<Map<String, String>> results = [];
 
-    // try {
-    //   // ドキュメントIDで検索
-    //   final doc =
-    //       await FirebaseFirestore.instance.collection('users').doc(query).get();
-    //   if (doc.exists) {
-    //     final data = doc.data() as Map<String, dynamic>;
-    //     results.add({
-    //       'uid': doc.id,
-    //       'name': data['name'] ?? '',
-    //       'iconUrl': data['iconUrl'] ?? '',
-    //     });
-    //   }
-    // }
-    //
     try {
-      // 'phone' フィールドで検索
       final snapshot =
           await FirebaseFirestore.instance
               .collection('users')
@@ -158,11 +148,11 @@ class _FriendAddPageState extends State<FriendAddPage> {
       for (var doc in snapshot.docs) {
         final data = doc.data();
         Map<String, String> userMap = {
+          'id': query,
           'uid': doc.id,
           'name': data['name'] ?? '',
           'iconUrl': data['iconUrl'] ?? '',
         };
-        // 重複排除
         if (!results.any((element) => element['uid'] == doc.id)) {
           results.add(userMap);
         }
@@ -172,7 +162,6 @@ class _FriendAddPageState extends State<FriendAddPage> {
     }
 
     try {
-      // 'phone' フィールドで検索
       final snapshot =
           await FirebaseFirestore.instance
               .collection('users')
@@ -185,7 +174,6 @@ class _FriendAddPageState extends State<FriendAddPage> {
           'name': data['name'] ?? '',
           'iconUrl': data['iconUrl'] ?? '',
         };
-        // 重複排除
         if (!results.any((element) => element['uid'] == doc.id)) {
           results.add(userMap);
         }
@@ -202,30 +190,17 @@ class _FriendAddPageState extends State<FriendAddPage> {
 
   @override
   Widget build(BuildContext context) {
-    // friendList にいるユーザーの uid を排除したリストを作って表示する
-    final friendUidSet = _friendList.map((f) => f['uid']).toSet();
-    // 友達の友達 + 近くの友達をまとめたリスト
-    final recommendedList =
-        [
-          ..._friendsOfFriends,
-          ..._nearbyFriends,
-        ].where((u) => !friendUidSet.contains(u['uid'])).toList();
-
     return Scaffold(
       appBar: AppBar(title: const Text('友達追加')),
       body: Column(
         children: [
-          // 1) 検索フィールド（電話番号またはIDで検索）
+          // 検索フィールド
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: TextField(
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: '電話番号またはIDで検索',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: _performSearch,
-                ),
+                border: OutlineInputBorder(),
               ),
               onChanged: (value) {
                 setState(() {
@@ -235,7 +210,8 @@ class _FriendAddPageState extends State<FriendAddPage> {
               onSubmitted: (_) => _performSearch(),
             ),
           ),
-          // 2) 検索結果がある場合は表示
+          IconButton(icon: const Icon(Icons.search), onPressed: _performSearch),
+          // 検索結果表示
           if (_searchResults.isNotEmpty)
             Expanded(
               flex: 1,
@@ -268,7 +244,19 @@ class _FriendAddPageState extends State<FriendAddPage> {
                                     ? const Icon(Icons.person)
                                     : null,
                           ),
-                          title: Text(user['name'] ?? 'No Name'),
+                          title: Row(
+                            children: [
+                              Text(user['id'] ?? 'No ID'),
+                              const SizedBox(width: 8),
+                              Text(
+                                user['name'] ?? 'No Name',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
                           trailing: ElevatedButton(
                             onPressed: () => _addFriend(user),
                             child: const Text('追加'),
@@ -277,11 +265,12 @@ class _FriendAddPageState extends State<FriendAddPage> {
                       },
                     ),
                   ),
+
                   const Divider(),
                 ],
               ),
             ),
-          // 3) フォローリクエスト一覧（固定高さ）
+          // フォローリクエスト表示
           if (_followRequests.isNotEmpty)
             SizedBox(
               height: 200,
@@ -327,7 +316,7 @@ class _FriendAddPageState extends State<FriendAddPage> {
                 ],
               ),
             ),
-          // 4) 友達の友達リストの表示
+          // 友達の友達リスト表示
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,7 +344,7 @@ class _FriendAddPageState extends State<FriendAddPage> {
                                   ? const Icon(Icons.person)
                                   : null,
                         ),
-                        title: Text(user['name'] ?? 'No Name'),
+                        title: Text(user['id'] ?? 'No Name'),
                         trailing: ElevatedButton(
                           onPressed: () => _addFriend(user),
                           child: const Text('追加'),
@@ -367,7 +356,7 @@ class _FriendAddPageState extends State<FriendAddPage> {
               ],
             ),
           ),
-          // 5) 近くの友達リストの表示
+          // 近くの友達リスト表示
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,7 +384,19 @@ class _FriendAddPageState extends State<FriendAddPage> {
                                   ? const Icon(Icons.person)
                                   : null,
                         ),
-                        title: Text(user['name'] ?? 'No Name'),
+                        title: Row(
+                          children: [
+                            Text(user['id'] ?? 'No ID'),
+                            const SizedBox(width: 8),
+                            Text(
+                              user['name'] ?? 'No Name',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
                         trailing: ElevatedButton(
                           onPressed: () => _addFriend(user),
                           child: const Text('追加'),

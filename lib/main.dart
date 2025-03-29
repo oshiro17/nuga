@@ -46,8 +46,9 @@ class _MyHomePageState extends State<MyHomePage> {
   // 選択された国コード（デフォルトは日本）
   String _selectedCountryCode = '+81';
 
-  // 連絡先のフォーマットなどを統一した電話番号（例: +818098527749）
-  String? _phoneNumber;
+  // 認証用フォーマット済み電話番号（例: +818098527749）と生の電話番号（例: 08098527749）
+  String? _formattedPhoneNumber;
+  String? _rawPhoneNumber;
 
   // 国コードと国旗のリスト（例）
   final List<Map<String, String>> _countryCodes = [
@@ -64,25 +65,26 @@ class _MyHomePageState extends State<MyHomePage> {
     final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final docSnapshot = await docRef.get();
     if (!docSnapshot.exists) {
-      // uid と phoneNumber を保存
+      // uid と電話番号（生の電話番号）を保存
       await docRef.set({'uid': uid, 'phoneNumber': phoneNumber});
     } else {
-      // 既に存在する場合も、電話番号フィールドを更新しておく（必要なら）
+      // 既に存在する場合も、電話番号フィールドを更新（必要なら）
       await docRef.set({'phoneNumber': phoneNumber}, SetOptions(merge: true));
     }
   }
 
   // 電話番号認証の実行
   Future<void> _verifyPhoneNumber() async {
-    String phoneNumberInput = _phoneNumberController.text.trim();
-    // ユーザーが入力した電話番号が"0"から始まる場合、先頭の"0"を削除
+    // ユーザーが入力した電話番号をそのまま取得（例："08098527749"）
+    String rawInput = _phoneNumberController.text.trim();
+    _rawPhoneNumber = rawInput; // そのまま保存用に保持
+
+    // 認証用には、先頭の"0"を除去して国コードを付与（例: "+81" + "8098527749" → "+818098527749"）
+    String phoneNumberInput = rawInput;
     if (phoneNumberInput.startsWith('0')) {
       phoneNumberInput = phoneNumberInput.substring(1);
     }
-    // 選択された国コードと結合（例: +81 + 8098527749 → +818098527749）
-    String phoneNumber = _selectedCountryCode + phoneNumberInput;
-    // ローカル変数に保存しておく
-    _phoneNumber = phoneNumber;
+    _formattedPhoneNumber = _selectedCountryCode + phoneNumberInput;
 
     setState(() {
       _statusMessage = '認証コードを送信しています...';
@@ -90,15 +92,15 @@ class _MyHomePageState extends State<MyHomePage> {
 
     try {
       await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
+        phoneNumber: _formattedPhoneNumber!,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // 自動認証が成功した場合
+          // 自動認証成功時
           await _auth.signInWithCredential(credential);
-          if (_auth.currentUser != null && _phoneNumber != null) {
-            // ユーザーの登録処理（電話番号も保存）
+          if (_auth.currentUser != null && _rawPhoneNumber != null) {
+            // 登録時は生の電話番号を使用
             await _registerUserIfNotExists(
               _auth.currentUser!.uid,
-              _phoneNumber!,
+              _rawPhoneNumber!,
             );
             if (!mounted) return;
             Navigator.pushReplacement(
@@ -159,9 +161,12 @@ class _MyHomePageState extends State<MyHomePage> {
       );
 
       await _auth.signInWithCredential(credential);
-      if (_auth.currentUser != null && _phoneNumber != null) {
-        // ユーザーの登録処理（電話番号も保存）
-        await _registerUserIfNotExists(_auth.currentUser!.uid, _phoneNumber!);
+      if (_auth.currentUser != null && _rawPhoneNumber != null) {
+        // 登録時は生の電話番号を使用
+        await _registerUserIfNotExists(
+          _auth.currentUser!.uid,
+          _rawPhoneNumber!,
+        );
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
@@ -214,12 +219,11 @@ class _MyHomePageState extends State<MyHomePage> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 30),
             ),
             const SizedBox(height: 40),
-            // 電話番号入力フィールド（国コードの選択ドロップダウン付き）
+            // 電話番号入力フィールド（国コード選択付き）
             TextField(
               controller: _phoneNumberController,
               decoration: InputDecoration(
                 labelText: '電話番号',
-                // prefix部分に国コード選択用のDropdownを配置
                 prefix: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: _selectedCountryCode,

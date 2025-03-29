@@ -40,10 +40,10 @@ class _HomePageState extends State<HomePage> {
   List<DocumentSnapshot> _friendDocs = [];
 
   // PlayRequest 用のデータ
-  int _requestsPossible = 1; // requestspossible フィールド（null の場合は 1）
-  List<String> _sendList = []; // 自分が送信したリクエスト先の友達 UID のリスト
-  List<String> _incomingPlayRequests = []; // 自分が受信した playrequests の送信者 UID のリスト
-  DateTime? _lastPlayRequestDate; // 最後にリクエスト送信した日（"yyyy-MM-dd"）
+  int _requestsPossible = 1;
+  List<String> _sendList = [];
+  List<String> _incomingPlayRequests = [];
+  DateTime? _lastPlayRequestDate;
   StreamSubscription? _playRequestsSubscription;
 
   @override
@@ -102,79 +102,78 @@ class _HomePageState extends State<HomePage> {
     debugPrint('フォローリクエストリスト: $_followRequests');
   }
 
-  // 2) フレンドリスト（キャッシュあり）
+  // 2) フレンドリスト（キャッシュなしで毎回取得）
   Future<void> _fetchFriendList() async {
-    final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString('friendList_${widget.uid}');
-    if (cached != null) {
-      try {
-        final List decoded = json.decode(cached);
-        _friendList =
-            decoded.map<Map<String, String>>((e) {
-              return {
-                'uid': e['uid'] ?? '',
-                'name': e['name'] ?? '',
-                'iconUrl': e['iconUrl'] ?? '',
-              };
-            }).toList();
-        debugPrint('キャッシュされたフレンドリスト: $_friendList');
-        setState(() {});
-      } catch (_) {
-        debugPrint('フレンドリストのキャッシュ読み込みエラー');
-      }
-    } else {
-      debugPrint('フレンドリストのキャッシュは存在しません');
-    }
-
-    final snapshot =
+    // FirestoreのfriendListサブコレクションから友達のuidを取得
+    final friendListSnapshot =
         await FirebaseFirestore.instance
             .collection('users')
             .doc(widget.uid)
             .collection('friendList')
             .get();
 
-    _friendDocs = snapshot.docs;
+    final friendUIDs = friendListSnapshot.docs.map((doc) => doc.id).toList();
 
-    final friends =
-        snapshot.docs.map<Map<String, String>>((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          return {
-            'uid': doc.id,
-            'name': data['name'] ?? '',
-            'iconUrl': data['iconUrl'] ?? '',
-          };
-        }).toList();
+    // 取得したuidを元に、usersコレクションから最新情報を取得
+    final List<Map<String, String>> friends = await Future.wait(
+      friendUIDs.map((friendUID) async {
+        final userDocSnapshot =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(friendUID)
+                .get();
+        final data = userDocSnapshot.data() as Map<String, dynamic>;
+        return {
+          'uid': friendUID,
+          'name': data['name'] ?? '',
+          'iconUrl': data['iconUrl'] ?? '',
+        };
+      }),
+    );
 
-    await prefs.setString('friendList_${widget.uid}', json.encode(friends));
-    debugPrint('Firebaseから取得したフレンドリストをキャッシュに保存: $friends');
+    debugPrint('Firebaseから取得したフレンドリスト: $friends');
 
     setState(() {
       _friendList = friends;
     });
   }
 
-  // 3) 友達の友達リスト（キャッシュあり）
+  // 3) 友達の友達リスト（キャッシュあり＋30回に1回はFirebase更新）
   Future<void> _fetchFriendsOfFriends() async {
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString('friends_of_friends_${widget.uid}');
-    if (cached != null) {
-      try {
-        final List decoded = json.decode(cached);
-        _friendsOfFriends =
-            decoded.map<Map<String, String>>((e) {
-              return {
-                'uid': e['uid'] ?? '',
-                'name': e['name'] ?? '',
-                'iconUrl': e['iconUrl'] ?? '',
-              };
-            }).toList();
-        debugPrint('キャッシュされた友達の友達リスト: $_friendsOfFriends');
-        setState(() {});
-      } catch (_) {
-        debugPrint('友達の友達リストのキャッシュ読み込みエラー');
+    int fetchCount = prefs.getInt('friendsOfFriends_fetchCount') ?? 0;
+    fetchCount++;
+    await prefs.setInt('friendsOfFriends_fetchCount', fetchCount);
+
+    if (fetchCount % 30 != 0) {
+      final cached = prefs.getString('friends_of_friends_${widget.uid}');
+      if (cached != null) {
+        try {
+          final List decoded = json.decode(cached);
+          List<Map<String, String>> cachedList =
+              decoded.map<Map<String, String>>((e) {
+                return {
+                  'id': e['id'] ?? '',
+                  'uid': e['uid'] ?? '',
+                  'name': e['name'] ?? '',
+                  'iconUrl': e['iconUrl'] ?? '',
+                };
+              }).toList();
+          // 既に friendList にあるユーザーを除外
+          final friendUIDSet = _friendList.map((e) => e['uid']).toSet();
+          cachedList =
+              cachedList
+                  .where((user) => !friendUIDSet.contains(user['uid']))
+                  .toList();
+          debugPrint('Using cached friends_of_friends: $cachedList');
+          setState(() {
+            _friendsOfFriends = cachedList;
+          });
+          return;
+        } catch (_) {
+          debugPrint('friends_of_friends キャッシュ読み込みエラー');
+        }
       }
-    } else {
-      debugPrint('友達の友達リストのキャッシュは存在しません');
     }
 
     debugPrint('Firebaseから友達の友達リストを取得します');
@@ -193,20 +192,24 @@ class _HomePageState extends State<HomePage> {
       );
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        debugPrint('取得したドキュメント: id=${doc.id}, data=$data');
         temp.add({
+          'id': data['id'] ?? '',
           'uid': doc.id,
           'name': data['name'] ?? '',
           'iconUrl': data['iconUrl'] ?? '',
         });
       }
     }
-    // 重複削除（キーは uid）
+    // 重複削除
     final unique = <String, Map<String, String>>{};
     for (var item in temp) {
       unique[item['uid'] ?? ''] = item;
     }
-    final result = unique.values.toList();
+    List<Map<String, String>> result = unique.values.toList();
+    // friendListにあるユーザーを除外
+    final friendUIDSet = _friendList.map((e) => e['uid']).toSet();
+    result =
+        result.where((user) => !friendUIDSet.contains(user['uid'])).toList();
 
     await prefs.setString(
       'friends_of_friends_${widget.uid}',
@@ -219,30 +222,44 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  // 4) 近くの友達リスト（キャッシュあり）
+  // 4) 近くの友達リスト（キャッシュあり＋3回に1回はFirebase更新）
   Future<void> _fetchNearbyFriends() async {
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString('nearby_friends_${widget.uid}');
-    if (cached != null) {
-      try {
-        final List decoded = json.decode(cached);
-        _nearbyFriends =
-            decoded.map<Map<String, String>>((e) {
-              return {
-                'uid': e['uid'] ?? '',
-                'name': e['name'] ?? 'namae',
-                'iconUrl': e['iconUrl'] ?? '',
-              };
-            }).toList();
-        debugPrint('キャッシュされた近くの友達リスト: $_nearbyFriends');
-        setState(() {});
-        return;
-      } catch (_) {
-        debugPrint('近くの友達リストのキャッシュ読み込みエラー');
+    int fetchCount = prefs.getInt('nearbyFriends_fetchCount') ?? 0;
+    fetchCount++;
+    await prefs.setInt('nearbyFriends_fetchCount', fetchCount);
+
+    if (fetchCount != 3) {
+      final cached = prefs.getString('nearby_friends_${widget.uid}');
+      if (cached != null) {
+        try {
+          final List decoded = json.decode(cached);
+          List<Map<String, String>> cachedList =
+              decoded.map<Map<String, String>>((e) {
+                return {
+                  'id': e['id'] ?? '',
+                  'uid': e['uid'] ?? '',
+                  'name': e['name'] ?? 'namae',
+                  'iconUrl': e['iconUrl'] ?? '',
+                };
+              }).toList();
+          final friendUIDSet = _friendList.map((e) => e['uid']).toSet();
+          cachedList =
+              cachedList
+                  .where((user) => !friendUIDSet.contains(user['uid']))
+                  .toList();
+          debugPrint('Using cached nearby_friends: $cachedList');
+          setState(() {
+            _nearbyFriends = cachedList;
+          });
+          fetchCount = 0;
+          // return;
+        } catch (_) {
+          debugPrint('nearby_friends キャッシュ読み込みエラー');
+        }
       }
-    } else {
-      debugPrint('近くの友達リストのキャッシュは存在しません');
     }
+
     debugPrint('Firebaseから近くの友達リストを取得します');
     final userDoc =
         await FirebaseFirestore.instance
@@ -253,18 +270,16 @@ class _HomePageState extends State<HomePage> {
     final userData = userDoc.data()!;
     final myStatus = userData['city'] ?? '';
 
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .where('city', isEqualTo: myStatus)
-            .get();
-
-    final nearList =
-        snapshot.docs
+    List<Map<String, String>> nearList =
+        (await FirebaseFirestore.instance
+                .collection('users')
+                .where('city', isEqualTo: myStatus)
+                .get())
+            .docs
             .map<Map<String, String>>((doc) {
               final data = doc.data();
-              debugPrint('取得したドキュメント: id=${doc.id}, data=${data['name']}');
               return {
+                'id': data['id'] ?? '',
                 'uid': doc.id,
                 'name': data['name'] ?? '',
                 'iconUrl': data['iconUrl'] ?? '',
@@ -272,6 +287,9 @@ class _HomePageState extends State<HomePage> {
             })
             .where((item) => item['uid'] != widget.uid)
             .toList();
+    final friendUIDSet = _friendList.map((e) => e['uid']).toSet();
+    nearList =
+        nearList.where((user) => !friendUIDSet.contains(user['uid'])).toList();
 
     await prefs.setString(
       'nearby_friends_${widget.uid}',
@@ -301,8 +319,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 6) 自分が送信した play request のリスト (sendlist) と最後の送信日を取得
-  // 6) 自分が送信した play request のリスト (sendlist) と最後の送信日を取得、かつ playrequests コレクションをクリア
+  // 6) sendlist および playrequests サブコレクションの処理
   Future<void> _fetchSendList() async {
     final doc =
         await FirebaseFirestore.instance
@@ -313,9 +330,7 @@ class _HomePageState extends State<HomePage> {
       final data = doc.data()!;
       final todayStr = DateTime.now().toIso8601String().substring(0, 10);
       final lastDateStr = data['lastPlayRequestDate'];
-      // lastPlayRequestDateが今日じゃなければ、sendlistとplayrequestsサブコレクションをクリアする
       if (lastDateStr == null || lastDateStr != todayStr) {
-        // sendlist を空リストに更新
         await FirebaseFirestore.instance
             .collection('users')
             .doc(widget.uid)
@@ -323,7 +338,6 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _sendList = [];
         });
-        // playrequestsサブコレクション内の全ドキュメントを削除
         final playRequestsSnapshot =
             await FirebaseFirestore.instance
                 .collection('users')
@@ -344,7 +358,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 7) 自分の playrequests サブコレクションのリスナー設定（受信したリクエスト：有効期限チェック付き）
+  // 7) playrequests のリスナー設定（有効期限チェック付き）
   void _setupPlayRequestsListener() {
     _playRequestsSubscription = FirebaseFirestore.instance
         .collection('users')
@@ -359,7 +373,6 @@ class _HomePageState extends State<HomePage> {
             final Timestamp? timestamp = data['date'] as Timestamp?;
             if (timestamp != null) {
               DateTime requestDate = timestamp.toDate();
-              // 本日と異なるリクエストは無効として除外
               if (!isSameDay(requestDate, DateTime.now())) continue;
               if (senderUid != null) {
                 newIncoming.add(senderUid);
@@ -372,9 +385,16 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
-  // ホーム側で送信後に sendlist を更新するためのコールバック
+  // ホーム側で送信後に sendlist を更新するコールバック
   Future<void> _refreshSendList() async {
     await _fetchSendList();
+  }
+
+  // 友達追加後のコールバック
+  Future<void> _handleFriendAdded() async {
+    // Firestoreから最新のfriendListを取得して更新
+    await _fetchFriendList();
+    // PlayRequestPage など、friendListを参照するページも再描画される
   }
 
   // BottomNavigationBar のタップ処理
@@ -391,7 +411,6 @@ class _HomePageState extends State<HomePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 各ページの設定（FriendAddPage, ProfilePage, FriendPage, PlayRequestPage）
     final pages = [
       FriendAddPage(
         uid: widget.uid,
@@ -399,6 +418,7 @@ class _HomePageState extends State<HomePage> {
         friendList: _friendList,
         friendsOfFriends: _friendsOfFriends,
         nearbyFriends: _nearbyFriends,
+        onFriendAdded: _handleFriendAdded, // 友達追加後の更新を通知
       ),
       ProfilePage(
         uid: widget.uid,
@@ -427,9 +447,9 @@ class _HomePageState extends State<HomePage> {
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        backgroundColor: Colors.black, // 背景を黒に設定
-        selectedItemColor: Colors.white, // 選択時のアイコン・ラベルを白に
-        unselectedItemColor: Colors.white70, // 非選択時は少し薄い白に
+        backgroundColor: Colors.black,
+        selectedItemColor: Colors.white,
+        unselectedItemColor: Colors.white70,
         selectedLabelStyle: const TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 14,
