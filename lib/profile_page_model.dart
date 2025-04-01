@@ -2,13 +2,13 @@ class ProfilePageModel {
   final String name;
   final String iconUrl;
   final String status;
-  final String? municipality; // 市町村(近くの友達で使う想定)
+  final String? city; // 市町村(近くの友達で使う想定)
 
   ProfilePageModel({
     required this.name,
     required this.iconUrl,
     required this.status,
-    this.municipality,
+    this.city,
   });
 
   // Firestore からの生成
@@ -17,7 +17,7 @@ class ProfilePageModel {
       name: data['name'] ?? '',
       iconUrl: data['iconUrl'] ?? '',
       status: data['status'] ?? '',
-      municipality: data['municipality'],
+      city: data['city'],
     );
   }
 
@@ -27,7 +27,7 @@ class ProfilePageModel {
       name: json['name'] ?? '',
       iconUrl: json['iconUrl'] ?? '',
       status: json['status'] ?? '',
-      municipality: json['municipality'],
+      city: json['city'],
     );
   }
 
@@ -37,7 +37,7 @@ class ProfilePageModel {
       'name': name,
       'iconUrl': iconUrl,
       'status': status,
-      if (municipality != null) 'municipality': municipality,
+      if (city != null) 'city': city,
     };
   }
 }

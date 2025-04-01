@@ -65,11 +65,16 @@ class _MyHomePageState extends State<MyHomePage> {
     final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final docSnapshot = await docRef.get();
     if (!docSnapshot.exists) {
-      // uid と電話番号（生の電話番号）を保存
-      await docRef.set({'uid': uid, 'phoneNumber': phoneNumber});
+      // ドキュメントが存在しない場合は、uid、電話番号、そして point を保存
+      await docRef.set({
+        'uid': uid,
+        'phoneNumber': phoneNumber,
+        'point': 100,
+        'city': 'Itoman',
+      });
     } else {
-      // 既に存在する場合も、電話番号フィールドを更新（必要なら）
-      await docRef.set({'phoneNumber': phoneNumber}, SetOptions(merge: true));
+      // 既に存在する場合も、電話番号と point を更新（必要なら）
+      await docRef.set({}, SetOptions(merge: true));
     }
   }
 
