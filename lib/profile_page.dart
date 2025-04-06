@@ -1,5 +1,6 @@
 // profile_page.dart
 import 'package:flutter/material.dart';
+import 'package:ringring/profile_edit_page.dart';
 
 class ProfilePage extends StatelessWidget {
   final String uid;
@@ -73,6 +74,23 @@ class ProfilePage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(status, style: const TextStyle(fontSize: 16)),
+              const SizedBox(height: 16),
+              // 横幅いっぱいの白いボタン（黒文字、丸い角）
+              Container(
+                width: double.infinity,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.black,
+                    backgroundColor: Colors.white, // テキストの色
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  ),
+                  onPressed: () {},
+                  child: const Text('プロフィール編集'),
+                ),
+              ),
             ],
           ),
         ),
@@ -82,30 +100,3 @@ class ProfilePage extends StatelessWidget {
 }
 
 /// プロフィール編集用の仮実装ページ（実際のフォーム実装は必要に応じて実装してください）
-class ProfileEditPage extends StatelessWidget {
-  final String uid;
-  final String iconUrl;
-  final String name;
-  final String status;
-
-  const ProfileEditPage({
-    Key? key,
-    required this.uid,
-    required this.iconUrl,
-    required this.name,
-    required this.status,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('プロフィール編集')),
-      body: Center(
-        child: Text(
-          'プロフィール編集ページ\n\nUID: $uid\n名前: $name\nステータス: $status',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
